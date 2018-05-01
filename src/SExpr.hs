@@ -6,7 +6,8 @@ import SError (LispError(Parser), ThrowsError)
 import Control.Monad.Error
 import Text.ParserCombinators.Parsec
 
--- In order to avoid import cycles this method had to be taken out of the parser file. It works as the final "readExpr" in there, but has error handling.
+-- In order to avoid import cycles this method had to be taken out of the parser file.
+-- It works as the final "readExpr" in there, but has error handling.
 
 readExpr :: String -> ThrowsError LispVal
 readExpr input = case parse parseExpr "lisp" input of

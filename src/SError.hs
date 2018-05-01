@@ -5,7 +5,8 @@ import SParser (LispVal, showVal, unwordsList)
 import Control.Monad.Error
 import Text.ParserCombinators.Parsec
              
--- Define possible ways the interpreter might fail and define how to print these errors (also making "LispError" and instance of "Show").
+-- Define possible ways the interpreter might fail and define how to print these
+-- errors (also making "LispError" and instance of "Show").
 
 data LispError = NumArgs Integer [LispVal]
                | TypeMismatch String LispVal
@@ -27,7 +28,8 @@ showError (Parser parseErr)             = "Parse error at " ++ show parseErr
 
 instance Show LispError where show = showError
 
--- Our next step is to make our error type into an instance of "Error". This is necessary for it to work with GHC's built-in error handling functions.
+-- Our next step is to make our error type into an instance of "Error". 
+--This is necessary for it to work with GHC's built-in error handling functions.
 
 instance Error LispError where
      noMsg = Default "An error has occurred"
@@ -38,7 +40,8 @@ instance Error LispError where
      
 type ThrowsError = Either LispError
 
--- The functions "trapError" and "extractValue" will be used in conjunction to extract the String representation of the errors, like so for example: (putStrLn $ extractValue $ trapError)
+-- The functions "trapError" and "extractValue" will be used in conjunction to extract
+-- the String representation of the errors, like so for example: (putStrLn $ extractValue $ trapError)
 
 trapError action = catchError action (return . show)
 
