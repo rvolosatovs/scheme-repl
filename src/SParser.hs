@@ -1,5 +1,7 @@
 module SParser (LispVal, readExpr, showVal) where
 
+import SError (LispError, ThrowsError, showError, trapError, extractValue)
+
 import Text.ParserCombinators.Parsec hiding (spaces)
 import Control.Monad
 
@@ -66,7 +68,7 @@ parseAtom = do
                          "#f" -> Bool False
                          _    -> Atom atom
                          
--- Here we read any number of digits, constructing a new parser for the purpose by applying the "digit" parser to the "many1" combinator.
+-- Here we read any number of digits, constructing a new parser for the purpose by applying the "many1" combinator to the "digit" parser.
 -- We are going to end up with a String, so we'll want to convert it to a number using the function "read", in order to then use the "Number" constructor.
 -- The function LiftM promotes a function to a monad, allowing us to use "Number . read" on the wrapped value inside what is returned from "many1 digit".
 
@@ -110,8 +112,8 @@ parseExpr = parseAtom
 
 -- Integrating "parseExpr" into our expression reader we finally get something useful, making it so it returns the expression instead of a String.
 
-readExpr :: String -> LispVal
-readExpr input = case parse parseExpr "lisp" input of
+readExpr03 :: String -> LispVal
+readExpr03 input = case parse parseExpr "lisp" input of
     Left err -> String $ "No match: " ++ show err
     Right val -> val
     
@@ -132,4 +134,11 @@ unwordsList = unwords . map showVal -- The "unwords" function glues together a l
 
 instance Show LispVal where show = showVal
 
--- Might be interesting to do a full treatment of the typeclass.
+-- It might be interesting to do a full treatment of the typeclass.
+
+--Implement error handling...
+
+readExpr :: String -> ThrowsError LispVal
+readExpr input = case parse parseExpr "lisp" input of
+     Left err -> throwError (Parser err)
+     Right val -> return val
