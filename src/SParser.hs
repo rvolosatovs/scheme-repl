@@ -1,6 +1,4 @@
-module SParser (LispVal, readExpr, showVal) where
-
-import SError (LispError, ThrowsError, showError, trapError, extractValue)
+module SParser (LispVal(..), showVal, unwordsList, parseExpr) where
 
 import Text.ParserCombinators.Parsec hiding (spaces)
 import Control.Monad
@@ -135,10 +133,3 @@ unwordsList = unwords . map showVal -- The "unwords" function glues together a l
 instance Show LispVal where show = showVal
 
 -- It might be interesting to do a full treatment of the typeclass.
-
---Implement error handling...
-
-readExpr :: String -> ThrowsError LispVal
-readExpr input = case parse parseExpr "lisp" input of
-     Left err -> throwError (Parser err)
-     Right val -> return val

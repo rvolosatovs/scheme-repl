@@ -1,7 +1,12 @@
-module SEvaluator (main) {-# LANGUAGE ExistentialQuantification #-} where
+{-# LANGUAGE ExistentialQuantification #-}
 
-import SParser (LispVal, readExpr, showVal)
-import SError (LispError, ThrowsError, showError, trapError, extractValue)
+module SEvaluator (eval) where
+
+import SExpr (readExpr)
+import SParser (LispVal(..), showVal)
+import SError (LispError(..), ThrowsError)
+
+import Control.Monad.Error
 
 -- The purpose of an evaluator is to map some code to some data. In Lisp, the data types for both code and data are the same, so our evaluator will return a "LispVal".
 -- Evaluating numbers, strings, booleans, and quoted lists is simple enough: Just return the value. The last clause in "eval" handles function application.
@@ -82,9 +87,11 @@ unpackNum notNum = throwError (TypeMismatch "number" notNum)
 boolBinop :: (LispVal -> ThrowsError a) -> (a -> a -> Bool) -> [LispVal] -> ThrowsError LispVal
 boolBinop unpacker op args = if length args /= 2 
                              then throwError $ NumArgs 2 args
-                             else do left <- unpacker $ args !! 0
-                                      right <- unpacker $ args !! 1
-                                      return $ Bool $ left `op` right
+                             else do {
+                                left <- unpacker $ args !! 0;
+                                right <- unpacker $ args !! 1;
+                                return $ Bool $ left `op` right;
+                            }
                                       
 numBoolBinop = boolBinop unpackNum
 strBoolBinop = boolBinop unpackStr
@@ -108,7 +115,7 @@ car :: [LispVal] -> ThrowsError LispVal
 car [List (x : xs)] = return x
 car [DottedList (x : xs) _] = return x
 car [badArg] = throwError (TypeMismatch "pair" badArg)
-car badArgLis = throwError (NumArgs 1 badArgList)
+car badArgList = throwError (NumArgs 1 badArgList)
 
 cdr :: [LispVal] -> ThrowsError LispVal
 cdr [List (x : xs)] = return (List xs)

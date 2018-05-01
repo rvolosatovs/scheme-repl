@@ -1,7 +1,10 @@
-module SError (LispError, ThrowsError, showError, trapError, extractValue) where
+module SError (LispError(..), ThrowsError, showError, trapError, extractValue) where
+
+import SParser (LispVal, showVal, unwordsList)
 
 import Control.Monad.Error
-
+import Text.ParserCombinators.Parsec
+             
 -- Define possible ways the interpreter might fail and define how to print these errors (also making "LispError" and instance of "Show").
 
 data LispError = NumArgs Integer [LispVal]

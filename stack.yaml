@@ -41,6 +41,7 @@ packages:
 # (e.g., acme-missiles-0.3)
 extra-deps:
 - parsec-3.1.13.0
+- mtl-2.2.2
 
 allow-newer: true
 
