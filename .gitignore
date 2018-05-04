@@ -1,3 +1,5 @@
 .stack-work/
 scheme-repl.cabal
 *~
+*.hi
+*.o
