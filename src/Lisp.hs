@@ -6,7 +6,7 @@ module Lisp
   ) where
 
 import Control.Monad
-import Control.Monad.Error
+import Control.Monad.Except
 import Data.IORef
 import System.IO
 import Text.ParserCombinators.Parsec hiding (spaces)
@@ -81,17 +81,12 @@ unwordsList :: [LispVal] -> String
 unwordsList = unwords . map showVal -- The "unwords" function glues together a list of words with spaces.
 
 data LispError
-  = NumArgs Integer
-            [LispVal]
-  | TypeMismatch String
-                 LispVal
+  = NumArgs Integer [LispVal]
+  | TypeMismatch String LispVal
   | Parser ParseError
-  | BadSpecialForm String
-                   LispVal
-  | NotFunction String
-                String
-  | UnboundVar String
-               String
+  | BadSpecialForm String LispVal
+  | NotFunction String String
+  | UnboundVar String String
   | Default String
 
 showError :: LispError -> String
@@ -106,10 +101,6 @@ showError (Parser parseErr) = "Parse error at " ++ show parseErr
 
 instance Show LispError where
   show = showError
-
-instance Error LispError where
-  noMsg = Default "An error has occurred"
-  strMsg = Default
 
 -- ThrowsError represents functions that may throw a "LispError" or return a value.
 type ThrowsError = Either LispError
@@ -156,7 +147,7 @@ type Env = IORef [(String, IORef LispVal)]
 nullEnv :: IO Env
 nullEnv = newIORef []
 
-type IOThrowsError = ErrorT LispError IO
+type IOThrowsError = ExceptT LispError IO
 
 liftThrows :: ThrowsError a -> IOThrowsError a
 liftThrows (Left err) = throwError err
@@ -164,7 +155,7 @@ liftThrows (Right val) = return val
 
 --- runIOThrows converts errors to strings wrapped in IO monad.
 runIOThrows :: IOThrowsError String -> IO String
-runIOThrows = (extractValue `fmap`) . runErrorT . trapError
+runIOThrows = (extractValue `fmap`) . runExceptT . trapError
 
 isBound :: Env -> String -> IO Bool
 isBound envRef var =
