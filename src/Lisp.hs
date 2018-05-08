@@ -52,13 +52,55 @@ parseQuoted = do
   x <- parseExpr
   return (Statement [Atom "quote", x])
 
+parseFunctionDef :: Parser GenVal
+parseFunctionDef = do
+  w <- parseAtom 
+  char '('
+  x <- parseAtom
+  y <- parseList
+  char ')'
+  z <- parseExpr
+  return (Statement [w, x, y, z])
+  
+parseVarArgsFunctionDef :: Parser GenVal
+parseVarArgsFunctionDef = do
+  w <- parseAtom 
+  char '('
+  x <- parseAtom 
+  y <- endBy parseList spaces
+  List (z:zs) <- char '.' >> spaces >> parseList
+  char ')'
+  return (Statement [w, x, List y, List zs, z])
+  
+parseLambda :: Parser GenVal
+parseLambda = do
+  x <- parseAtom 
+  char '('
+  List (y:ys) <- parseList
+  char ')'
+  return (Statement [x, y, List ys])
+  
+parseVarArgsLambda :: Parser GenVal
+parseVarArgsLambda = do
+  x <- parseAtom 
+  char '('
+  y <- endBy parseExpr spaces
+  List (z:zs) <- char '.' >> spaces >> parseList
+  char ')'
+  return (Statement [x, List y, List zs, z])
+  
+parseNoArgsLambda :: Parser GenVal
+parseNoArgsLambda = do
+  List (x1:x2:xs) <- parseList
+  return (Statement [x1, List xs, x2])
+  
 parseStatement :: Parser GenVal
 parseStatement = do
-  x <- parseAtom 
-  spaces
-  List y <- parseList
-  return (Statement (x:y))
-  
+  try parseFunctionDef <|> try parseVarArgsFunctionDef <|> try parseLambda <|> try parseVarArgsLambda <|> try parseNoArgsLambda <|> do
+      x <- parseAtom 
+      y <- parseList
+      return (Statement [x, y])
+
 parseExpr :: Parser GenVal
 parseExpr =
   parseAtom <|> parseString <|> parseInteger <|> parseQuoted <|> do
