@@ -1,5 +1,3 @@
-{-# LANGUAGE ExistentialQuantification #-}
-
 module Lisp (readExpr) where
 
 import Generic 
@@ -52,13 +50,20 @@ parseQuoted :: Parser GenVal
 parseQuoted = do
   char '\''
   x <- parseExpr
-  return (List [Atom "quote", x])
+  return (Statement [Atom "quote", x])
 
+parseStatement :: Parser GenVal
+parseStatement = do
+  x <- parseAtom 
+  spaces
+  List y <- parseList
+  return (Statement (x:y))
+  
 parseExpr :: Parser GenVal
 parseExpr =
   parseAtom <|> parseString <|> parseInteger <|> parseQuoted <|> do
     char '('
-    x <- try parseList <|> parseDottedList
+    x <- try parseStatement <|> try parseList <|> parseDottedList
     char ')'
     return x
 

@@ -1,16 +1,18 @@
+{-# LANGUAGE ExistentialQuantification #-}
+
 module Generic (GenVal(..), showVal, GenError(..), showError, ThrowsError, trapError, extractValue, Env, nullEnv, IOThrowsError, liftThrows, runIOThrows, runOne, runRepl) where
          
 import Control.Monad.Except
 import Data.IORef
 import Text.Parsec.Error
+import System.IO
          
 data GenVal
-  | Atom String -- Unique identifier for a certain action or value.
-  | Statement Atom [GenVal] -- Execution of an action (highly variable interpretation).
+  = Atom String -- Unique identifier for a certain action or value.
+  | Statement [GenVal] -- Execution of an action (highly variable interpretation).
   | List [GenVal]
   | DottedList [GenVal] GenVal -- Particular of functional languages.
   | Integer Integer 
-  | Double Double
   | String String
   | Bool Bool
   | PrimitiveFunc ([GenVal] -> ThrowsError GenVal)
@@ -24,9 +26,8 @@ unwordsList = unwords . map showVal -- The "unwords" function glues together a l
  
 showVal :: GenVal -> String
 showVal (Atom name) = name
-showVal (Statement (Atom name) _) = "(" + name + ") (...)"
+showVal (Statement ((Atom name):_)) = "(" ++ name ++ ") (...)"
 showVal (Integer contents) = show contents
-showVal (Double contents) = show contents
 showVal (String contents) = "\"" ++ contents ++ "\""
 showVal (Bool True) = "<true>" -- Language specific, show placeholder.
 showVal (Bool False) = "<false>" -- Language specific, show placeholder.
@@ -139,7 +140,7 @@ numericBinop op [] = throwError (NumArgs 2 [])
 numericBinop op singleVal@[_] = throwError (NumArgs 2 singleVal)
 numericBinop op params = mapM unpackNum params >>= return . Integer . foldl1 op
 
-unpackNum :: GenVal -> ThrowsError Integer
+unpackNum :: GenVal -> ThrowsError Integer 
 unpackNum (Integer n) = return n
 unpackNum (String n) =
   let parsed = reads n
@@ -306,28 +307,30 @@ eval :: Env -> GenVal -> IOThrowsError GenVal
 eval env val@(String _) = return val
 eval env val@(Integer _) = return val
 eval env val@(Bool _) = return val
+eval env val@(List _) = return val
+eval env val@(DottedList _ _) = return val
 eval env (Atom id) = getVar env id
-eval env (Statement (Atom "quote") [Atom val]) = return val
-eval env (Statement (Atom "if") [pred, conseq, alt]) =
+eval env (Statement [Atom "quote", val]) = return val
+eval env (Statement [Atom "if", pred, conseq, alt]) =
   eval env pred >>=
   (\x ->
      case x of
        (Bool False) -> eval env alt
        otherwise -> eval env conseq)
-eval env (Statement (Atom "set") [Atom var, form]) = eval env form >>= setVar env var
-eval env (Statement (Atom "define") [Atom var, form]) =
+eval env (Statement [Atom "set", Atom var, form]) = eval env form >>= setVar env var
+eval env (Statement [Atom "define", Atom var, form]) =
   eval env form >>= defineVar env var
-eval env (Statement (Atom "define") [Atom var, List params, List body) =
+eval env (Statement [Atom "define", Atom var, List params, List body]) =
   makeNormalFunc env params body >>= defineVar env var
-eval env (Statement (Atom "define") [Atom var, List params, List body, Maybe varargs]) =
+eval env (Statement [Atom "define", Atom var, List params, List body, varargs]) =
   makeVarArgs varargs env params body >>= defineVar env var
-eval env (Statement (Atom "lambda") [List params, List body]) =
+eval env (Statement [Atom "lambda", List params, List body]) =
   makeNormalFunc env params body
-eval env (Statement (Atom "lambda") [List [], List body, Maybe varargs]) =
+eval env (Statement [Atom "lambda", List [], List body, varargs]) =
   makeVarArgs varargs env [] body
-eval env (Statement (Atom "lambda") [List params, List body, Maybe varargs]) =
+eval env (Statement [Atom "lambda", List params, List body, varargs]) =
   makeVarArgs varargs env params body
-eval env (Statement funtion [List args]) = do
+eval env (Statement [function, List args]) = do
   func <- eval env function
   argVals <- mapM (eval env) args
   apply func argVals
