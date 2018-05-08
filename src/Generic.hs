@@ -307,27 +307,27 @@ eval env val@(String _) = return val
 eval env val@(Integer _) = return val
 eval env val@(Bool _) = return val
 eval env (Atom id) = getVar env id
-eval env (List [Atom "quote", val]) = return val
-eval env (List [Atom "if", pred, conseq, alt]) =
+eval env (Statement (Atom "quote") [Atom val]) = return val
+eval env (Statement (Atom "if") [pred, conseq, alt]) =
   eval env pred >>=
   (\x ->
      case x of
        (Bool False) -> eval env alt
        otherwise -> eval env conseq)
-eval env (List [Atom "set!", Atom var, form]) = eval env form >>= setVar env var
-eval env (List [Atom "define", Atom var, form]) =
+eval env (Statement (Atom "set") [Atom var, form]) = eval env form >>= setVar env var
+eval env (Statement (Atom "define") [Atom var, form]) =
   eval env form >>= defineVar env var
-eval env (List (Atom "define":List (Atom var:params):body)) =
+eval env (Statement (Atom "define") [Atom var, List params, List body) =
   makeNormalFunc env params body >>= defineVar env var
-eval env (List (Atom "define":DottedList (Atom var:params) varargs:body)) =
+eval env (Statement (Atom "define") [Atom var, List params, List body, Maybe varargs]) =
   makeVarArgs varargs env params body >>= defineVar env var
-eval env (List (Atom "lambda":List params:body)) =
+eval env (Statement (Atom "lambda") [List params, List body]) =
   makeNormalFunc env params body
-eval env (List (Atom "lambda":DottedList params varargs:body)) =
-  makeVarArgs varargs env params body
-eval env (List (Atom "lambda":varargs@(Atom _):body)) =
+eval env (Statement (Atom "lambda") [List [], List body, Maybe varargs]) =
   makeVarArgs varargs env [] body
-eval env (List (function:args)) = do
+eval env (Statement (Atom "lambda") [List params, List body, Maybe varargs]) =
+  makeVarArgs varargs env params body
+eval env (Statement funtion [List args]) = do
   func <- eval env function
   argVals <- mapM (eval env) args
   apply func argVals
