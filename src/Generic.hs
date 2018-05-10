@@ -1,6 +1,6 @@
-{-# LANGUAGE ExistentialQuantification #-}
-
-module Generic (GenVal(..), showVal, GenError(..), showError, ThrowsError, trapError, extractValue, Env, nullEnv, IOThrowsError, liftThrows, runIOThrows, runOne, runRepl) where
+module Generic (GenVal(..), showVal, GenError(..), showError, ThrowsError,
+ trapError, extractValue, Env, nullEnv, IOThrowsError, liftThrows, runIOThrows,
+ unpackNum, unpackStr, unpackBool, runOne, runRepl) where
          
 import Control.Monad.Except
 import Data.IORef
@@ -26,7 +26,7 @@ unwordsList = unwords . map showVal -- The "unwords" function glues together a l
  
 showVal :: GenVal -> String
 showVal (Atom name) = name
-showVal (Statement ((Atom name):_)) = "(" ++ name ++ ") (...)"
+showVal (Statement ((Atom name):body)) = "(" ++ name ++ ") (" ++ showVal (List body) ++ ")"
 showVal (Integer contents) = show contents
 showVal (String contents) = "\"" ++ contents ++ "\""
 showVal (Bool True) = "<true>" -- Language specific, show placeholder.
@@ -134,12 +134,6 @@ bindVars envRef bindings = readIORef envRef >>= extendEnv bindings >>= newIORef
     extendEnv bindings env = liftM (++ env) (mapM addBinding bindings)
     addBinding (var, val) = newIORef val >>= return . (,) var
 
-numericBinop ::
-     (Integer -> Integer -> Integer) -> [GenVal] -> ThrowsError GenVal
-numericBinop op [] = throwError (NumArgs 2 [])
-numericBinop op singleVal@[_] = throwError (NumArgs 2 singleVal)
-numericBinop op params = mapM unpackNum params >>= return . Integer . foldl1 op
-
 unpackNum :: GenVal -> ThrowsError Integer 
 unpackNum (Integer n) = return n
 unpackNum (String n) =
@@ -150,25 +144,6 @@ unpackNum (String n) =
 unpackNum (List [n]) = unpackNum n
 unpackNum notNum = throwError (TypeMismatch "Integer" notNum)
 
-boolBinop ::
-     (GenVal -> ThrowsError a)
-  -> (a -> a -> Bool)
-  -> [GenVal]
-  -> ThrowsError GenVal
-boolBinop unpacker op args =
-  if length args /= 2
-    then throwError $ NumArgs 2 args
-    else do
-      left <- unpacker $ args !! 0
-      right <- unpacker $ args !! 1
-      return $ Bool $ left `op` right
-
-numBoolBinop = boolBinop unpackNum
-
-strBoolBinop = boolBinop unpackStr
-
-boolBoolBinop = boolBinop unpackBool
-
 unpackStr :: GenVal -> ThrowsError String
 unpackStr (String s) = return s
 unpackStr (Integer s) = return (show s)
@@ -178,105 +153,6 @@ unpackStr notString = throwError (TypeMismatch "string" notString)
 unpackBool :: GenVal -> ThrowsError Bool
 unpackBool (Bool b) = return b
 unpackBool notBool = throwError (TypeMismatch "boolean" notBool)
-
--- car returns the first element of a list.
-car :: [GenVal] -> ThrowsError GenVal
-car [List (x:xs)] = return x
-car [DottedList (x:xs) _] = return x
-car [badArg] = throwError (TypeMismatch "pair" badArg)
-car badArgList = throwError (NumArgs 1 badArgList)
-
--- cdr returns what remains of the list after removing the first element.
-cdr :: [GenVal] -> ThrowsError GenVal
-cdr [List (x:xs)] = return (List xs)
-cdr [DottedList [_] x] = return x
-cdr [DottedList (_:xs) x] = return (DottedList xs x)
-cdr [badArg] = throwError (TypeMismatch "pair" badArg)
-cdr badArgList = throwError (NumArgs 1 badArgList)
-
--- cons constructs lists; it is the inverse of "car" and "cdr".
-cons :: [GenVal] -> ThrowsError GenVal
-cons [x1, List []] = return (List [x1])
-cons [x, List xs] = return (List (x : xs))
-cons [x, DottedList xs xlast] = return (DottedList (x : xs) xlast) -- If the list is a "DottedList", then it should stay a "DottedList", taking into account the improper tail.
-cons [x1, x2] = return (DottedList [x1] x2) -- Cons of two non-lists results in a "DottedList".
-cons badArgList = throwError (NumArgs 2 badArgList)
-
-eqv :: [GenVal] -> ThrowsError GenVal
-eqv [(Bool arg1), (Bool arg2)] = return (Bool (arg1 == arg2))
-eqv [(Integer arg1), (Integer arg2)] = return (Bool (arg1 == arg2))
-eqv [(String arg1), (String arg2)] = return (Bool (arg1 == arg2))
-eqv [(Atom arg1), (Atom arg2)] = return (Bool (arg1 == arg2))
-eqv [(DottedList xs x), (DottedList ys y)] =
-  eqv [List (xs ++ [x]), List (ys ++ [y])]
-eqv [(List arg1), (List arg2)] =
-  return (Bool ((length arg1 == length arg2) && (all eqvPair (zip arg1 arg2))))
-  where
-    eqvPair (x1, x2) =
-      case eqv [x1, x2] of
-        Left err -> False
-        Right (Bool val) -> val
-eqv [_, _] = return (Bool False)
-eqv badArgList = throwError (NumArgs 2 badArgList)
-
-data Unpacker =
-  forall a. Eq a =>
-            AnyUnpacker (GenVal -> ThrowsError a)
-
-unpackEquals :: GenVal -> GenVal -> Unpacker -> ThrowsError Bool
-unpackEquals arg1 arg2 (AnyUnpacker unpacker) =
-  do unpacked1 <- unpacker arg1
-     unpacked2 <- unpacker arg2
-     return $ unpacked1 == unpacked2
-     `catchError` (const $ return False)
-
--- equal ignores differences in the type tags and only tests if two values can be interpreted the same.
-equal :: [GenVal] -> ThrowsError GenVal
-equal [arg1, arg2] = do
-  primitiveEquals <-
-    liftM or $
-    mapM
-      (unpackEquals arg1 arg2)
-      [AnyUnpacker unpackNum, AnyUnpacker unpackStr, AnyUnpacker unpackBool]
-  eqvEquals <- eqv [arg1, arg2]
-  return $
-    Bool $
-    (primitiveEquals ||
-     let (Bool x) = eqvEquals
-      in x)
-equal badArgList = throwError $ NumArgs 2 badArgList
-
--- primitives represent the primitives, which are expected to be found as functions in the Scheme language represented as a list of pairs,
--- containing the key we are to find with "lookup" and the function we are to apply to the arguments.
-primitives :: [(String, [GenVal] -> ThrowsError GenVal)]
-primitives =
-  [ ("+", numericBinop (+))
-  , ("-", numericBinop (-))
-  , ("*", numericBinop (*))
-  , ("/", numericBinop div)
-  , ("mod", numericBinop mod)
-  , ("quotient", numericBinop quot)
-  , ("remainder", numericBinop rem)
-  , ("=", numBoolBinop (==))
-  , ("<", numBoolBinop (<))
-  , (">", numBoolBinop (>))
-  , ("/=", numBoolBinop (/=))
-  , (">=", numBoolBinop (>=))
-  , ("<=", numBoolBinop (<=))
-  , ("&&", boolBoolBinop (&&))
-  , ("||", boolBoolBinop (||))
-  , ("string=?", strBoolBinop (==))
-  , ("string<?", strBoolBinop (<))
-  , ("string>?", strBoolBinop (>))
-  , ("string<=?", strBoolBinop (<=))
-  , ("string>=?", strBoolBinop (>=))
-  , ("car", car)
-  , ("cdr", cdr)
-  , ("cons", cons)
-  , ("eq?", eqv)
-  , ("eqv?", eqv)
-  , ("equal?", equal)
-  ]
 
 makeFunc varargs env params body =
   return $ Func (map showVal params) varargs body env
@@ -326,8 +202,6 @@ eval env (Statement [Atom "define", Atom var, List params, List body, varargs]) 
   makeVarArgs varargs env params body >>= defineVar env var
 eval env (Statement [Atom "lambda", List params, List body]) =
   makeNormalFunc env params body
-eval env (Statement [Atom "lambda", List [], List body, varargs]) =
-  makeVarArgs varargs env [] body
 eval env (Statement [Atom "lambda", List params, List body, varargs]) =
   makeVarArgs varargs env params body
 eval env (Statement [function, List args]) = do
@@ -355,14 +229,14 @@ untilOneOf_ as prompt action = do
     then return ()
     else action expr >> untilOneOf_ as prompt action
 
-primitiveBindings :: IO Env
-primitiveBindings =
+primitiveBindings :: [(String, [GenVal] -> ThrowsError GenVal)] -> IO Env
+primitiveBindings primitives =
   nullEnv >>= (flip bindVars $ map makePrimitiveFunc primitives)
   where
     makePrimitiveFunc (var, func) = (var, PrimitiveFunc func)
 
-runOne :: (String -> ThrowsError GenVal) -> String -> IO ()
-runOne reader = (primitiveBindings >>=) . flip (evalAndPrint reader)
+runOne :: (String -> ThrowsError GenVal) -> [(String, [GenVal] -> ThrowsError GenVal)] -> String -> IO ()
+runOne reader primitives = ((primitiveBindings primitives) >>=) . flip (evalAndPrint reader)
 
-runRepl :: (String -> ThrowsError GenVal) -> String -> IO ()
-runRepl reader p = primitiveBindings >>= untilOneOf_ ["quit", "q", "\EOT"] (readPrompt p) . (evalAndPrint reader)
+runRepl :: (String -> ThrowsError GenVal) -> [(String, [GenVal] -> ThrowsError GenVal)] -> String -> IO ()
+runRepl reader primitives p = (primitiveBindings primitives) >>= untilOneOf_ ["quit", "q", "\EOT"] (readPrompt p) . (evalAndPrint reader)
