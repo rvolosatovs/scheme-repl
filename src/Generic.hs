@@ -1,18 +1,35 @@
-module Generic (GenVal(..), showVal, GenError(..), showError, ThrowsError,
- trapError, extractValue, Env, nullEnv, IOThrowsError, liftThrows, runIOThrows,
- unpackNum, unpackStr, unpackBool, runOne, runRepl) where
-         
+module Generic
+  ( GenVal(..)
+  , showVal
+  , GenError(..)
+  , showError
+  , ThrowsError
+  , trapError
+  , extractValue
+  , Env
+  , nullEnv
+  , IOThrowsError
+  , liftThrows
+  , runIOThrows
+  , unpackNum
+  , unpackStr
+  , unpackBool
+  , runOne
+  , runRepl
+  ) where
+
 import Control.Monad.Except
 import Data.IORef
-import Text.Parsec.Error
 import System.IO
-         
+import Text.Parsec.Error
+
 data GenVal
   = Atom String -- Unique identifier for a certain action or value.
   | Statement [GenVal] -- Execution of an action (highly variable interpretation).
   | List [GenVal]
-  | DottedList [GenVal] GenVal -- Particular of functional languages.
-  | Integer Integer 
+  | DottedList [GenVal]
+               GenVal -- Particular of functional languages.
+  | Integer Integer
   | String String
   | Bool Bool
   | PrimitiveFunc ([GenVal] -> ThrowsError GenVal)
@@ -20,13 +37,14 @@ data GenVal
          , vararg :: (Maybe String)
          , body :: [GenVal]
          , closure :: Env }
- 
+
 unwordsList :: [GenVal] -> String
 unwordsList = unwords . map showVal -- The "unwords" function glues together a list of words with spaces.
- 
+
 showVal :: GenVal -> String
 showVal (Atom name) = name
-showVal (Statement ((Atom name):body)) = "(" ++ name ++ ") (" ++ showVal (List body) ++ ")"
+showVal (Statement ((Atom name):body)) =
+  "(" ++ name ++ ") (" ++ showVal (List body) ++ ")"
 showVal (Integer contents) = show contents
 showVal (String contents) = "\"" ++ contents ++ "\""
 showVal (Bool True) = "<true>" -- Language specific, show placeholder.
@@ -42,19 +60,24 @@ showVal (Func {params = args, vararg = varargs, body = body, closure = env}) =
      Nothing -> ""
      Just arg -> " . " ++ arg) ++
   ") ...)"
-  
+
 instance Show GenVal where
   show = showVal
-         
+
 data GenError
-  = NumArgs Integer [GenVal]
-  | TypeMismatch String GenVal
+  = NumArgs Integer
+            [GenVal]
+  | TypeMismatch String
+                 GenVal
   | Parser ParseError
-  | BadSpecialForm String GenVal
-  | NotFunction String String
-  | UnboundVar String String
+  | BadSpecialForm String
+                   GenVal
+  | NotFunction String
+                String
+  | UnboundVar String
+               String
   | Default String
-  
+
 showError :: GenError -> String
 showError (UnboundVar message varname) = message ++ ": " ++ varname
 showError (BadSpecialForm message form) = message ++ ": " ++ show form
@@ -67,7 +90,7 @@ showError (Parser parseErr) = "Parse error at " ++ show parseErr
 
 instance Show GenError where
   show = showError
-  
+
 -- ThrowsError represents functions that may throw a "GenError" or return a value.
 type ThrowsError = Either GenError
 
@@ -134,7 +157,7 @@ bindVars envRef bindings = readIORef envRef >>= extendEnv bindings >>= newIORef
     extendEnv bindings env = liftM (++ env) (mapM addBinding bindings)
     addBinding (var, val) = newIORef val >>= return . (,) var
 
-unpackNum :: GenVal -> ThrowsError Integer 
+unpackNum :: GenVal -> ThrowsError Integer
 unpackNum (Integer n) = return n
 unpackNum (String n) =
   let parsed = reads n
@@ -193,7 +216,8 @@ eval env (Statement [Atom "if", pred, conseq, alt]) =
      case x of
        (Bool False) -> eval env alt
        otherwise -> eval env conseq)
-eval env (Statement [Atom "set", Atom var, form]) = eval env form >>= setVar env var
+eval env (Statement [Atom "set", Atom var, form]) =
+  eval env form >>= setVar env var
 eval env (Statement [Atom "define", Atom var, form]) =
   eval env form >>= defineVar env var
 eval env (Statement [Atom "define", Atom var, List params, List body]) =
@@ -235,8 +259,19 @@ primitiveBindings primitives =
   where
     makePrimitiveFunc (var, func) = (var, PrimitiveFunc func)
 
-runOne :: (String -> ThrowsError GenVal) -> [(String, [GenVal] -> ThrowsError GenVal)] -> String -> IO ()
-runOne reader primitives = ((primitiveBindings primitives) >>=) . flip (evalAndPrint reader)
+runOne ::
+     (String -> ThrowsError GenVal)
+  -> [(String, [GenVal] -> ThrowsError GenVal)]
+  -> String
+  -> IO ()
+runOne reader primitives =
+  ((primitiveBindings primitives) >>=) . flip (evalAndPrint reader)
 
-runRepl :: (String -> ThrowsError GenVal) -> [(String, [GenVal] -> ThrowsError GenVal)] -> String -> IO ()
-runRepl reader primitives p = (primitiveBindings primitives) >>= untilOneOf_ ["quit", "q", "\EOT"] (readPrompt p) . (evalAndPrint reader)
+runRepl ::
+     (String -> ThrowsError GenVal)
+  -> [(String, [GenVal] -> ThrowsError GenVal)]
+  -> String
+  -> IO ()
+runRepl reader primitives p =
+  (primitiveBindings primitives) >>=
+  untilOneOf_ ["quit", "q", "\EOT"] (readPrompt p) . (evalAndPrint reader)

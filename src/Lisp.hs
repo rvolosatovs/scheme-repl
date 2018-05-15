@@ -1,17 +1,19 @@
 {-# LANGUAGE ExistentialQuantification #-}
 
-module Lisp (readExpr, primitives) where
+module Lisp
+  ( readExpr
+  , primitives
+  ) where
 
-import Generic 
-  
-import Control.Monad
-import Control.Monad.Except
-import Data.IORef
-import System.IO
-import Text.ParserCombinators.Parsec hiding (spaces)
+import           Generic
+
+import           Control.Monad
+import           Control.Monad.Except
+import           Data.IORef
+import           System.IO
+import           Text.ParserCombinators.Parsec hiding (spaces)
 
 ----------------------------- Language parser -----------------------------
-
 symbol :: Parser Char
 symbol = oneOf "!#$%&|*+-/:<=>?@^_~"
 
@@ -25,7 +27,7 @@ parseString = do
   char '"'
   return (String x)
 
--- parseAtom parses and atom, which is a letter or symbol, 
+-- parseAtom parses and atom, which is a letter or symbol,
 -- followed by any Integer of letters, digits, or symbols.
 parseAtom :: Parser GenVal
 parseAtom = do
@@ -36,7 +38,7 @@ parseAtom = do
     case atom of
       "#t" -> Bool True
       "#f" -> Bool False
-      _ -> Atom atom
+      _    -> Atom atom
 
 parseInteger :: Parser GenVal
 parseInteger = liftM (Integer . read) (many1 digit)
@@ -68,10 +70,10 @@ parseFunctionDef = do
   List z <- parseList
   char ')'
   return (Statement [x, y, List ys, List z])
-  
+
 parseVarArgsFunctionDef :: Parser GenVal
 parseVarArgsFunctionDef = do
-  w <- parseAtom 
+  w <- parseAtom
   spaces
   char '('
   x <- parseAtom
@@ -80,31 +82,32 @@ parseVarArgsFunctionDef = do
   List (z:zs) <- char '.' >> spaces >> parseList
   char ')'
   return (Statement [w, x, List y, List zs, z])
-  
+
 parseLambda :: Parser GenVal
 parseLambda = do
-  x <- parseAtom 
+  x <- parseAtom
   spaces
   char '('
   List (y:ys) <- parseList
   char ')'
   return (Statement [x, y, List ys])
-  
+
 parseVarArgsLambda :: Parser GenVal
 parseVarArgsLambda = do
-  x <- parseAtom 
+  x <- parseAtom
   spaces
   char '('
   y <- endBy parseExpr spaces
   List (z:zs) <- char '.' >> spaces >> parseList
   char ')'
   return (Statement [x, List y, List zs, z])
-  
+
 parseStatement :: Parser GenVal
 parseStatement = do
-  try parseFunctionDef <|> try parseVarArgsFunctionDef <|> try parseLambda <|> try parseVarArgsLambda <|> do
-      List (x:xs) <- parseList
-      return (Statement [x, List xs])
+  try parseFunctionDef <|> try parseVarArgsFunctionDef <|> try parseLambda <|>
+    try parseVarArgsLambda <|> do
+    List (x:xs) <- parseList
+    return (Statement [x, List xs])
 
 parseExpr :: Parser GenVal
 parseExpr =
@@ -117,11 +120,10 @@ parseExpr =
 readExpr :: String -> ThrowsError GenVal
 readExpr input =
   case parse parseExpr "lisp" input of
-    Left err -> throwError (Parser err)
+    Left err  -> throwError (Parser err)
     Right val -> return val
- 
----------------------------- Primitive functions ----------------------------
 
+---------------------------- Primitive functions ----------------------------
 numericBinop ::
      (Integer -> Integer -> Integer) -> [GenVal] -> ThrowsError GenVal
 numericBinop op [] = throwError (NumArgs 2 [])
@@ -146,29 +148,29 @@ numBoolBinop = boolBinop unpackNum
 strBoolBinop = boolBinop unpackStr
 
 boolBoolBinop = boolBinop unpackBool
- 
+
 -- car returns the first element of a list.
 car :: [GenVal] -> ThrowsError GenVal
-car [List (x:xs)] = return x
+car [List (x:xs)]         = return x
 car [DottedList (x:xs) _] = return x
-car [badArg] = throwError (TypeMismatch "pair" badArg)
-car badArgList = throwError (NumArgs 1 badArgList)
+car [badArg]              = throwError (TypeMismatch "pair" badArg)
+car badArgList            = throwError (NumArgs 1 badArgList)
 
 -- cdr returns what remains of the list after removing the first element.
 cdr :: [GenVal] -> ThrowsError GenVal
-cdr [List (x:xs)] = return (List xs)
-cdr [DottedList [_] x] = return x
+cdr [List (x:xs)]         = return (List xs)
+cdr [DottedList [_] x]    = return x
 cdr [DottedList (_:xs) x] = return (DottedList xs x)
-cdr [badArg] = throwError (TypeMismatch "pair" badArg)
-cdr badArgList = throwError (NumArgs 1 badArgList)
+cdr [badArg]              = throwError (TypeMismatch "pair" badArg)
+cdr badArgList            = throwError (NumArgs 1 badArgList)
 
 -- cons constructs lists; it is the inverse of "car" and "cdr".
 cons :: [GenVal] -> ThrowsError GenVal
-cons [x1, List []] = return (List [x1])
-cons [x, List xs] = return (List (x : xs))
+cons [x1, List []]            = return (List [x1])
+cons [x, List xs]             = return (List (x : xs))
 cons [x, DottedList xs xlast] = return (DottedList (x : xs) xlast) -- If the list is a "DottedList", then it should stay a "DottedList", taking into account the improper tail.
-cons [x1, x2] = return (DottedList [x1] x2) -- Cons of two non-lists results in a "DottedList".
-cons badArgList = throwError (NumArgs 2 badArgList)
+cons [x1, x2]                 = return (DottedList [x1] x2) -- Cons of two non-lists results in a "DottedList".
+cons badArgList               = throwError (NumArgs 2 badArgList)
 
 eqv :: [GenVal] -> ThrowsError GenVal
 eqv [(Bool arg1), (Bool arg2)] = return (Bool (arg1 == arg2))
@@ -182,7 +184,7 @@ eqv [(List arg1), (List arg2)] =
   where
     eqvPair (x1, x2) =
       case eqv [x1, x2] of
-        Left err -> False
+        Left err         -> False
         Right (Bool val) -> val
 eqv [_, _] = return (Bool False)
 eqv badArgList = throwError (NumArgs 2 badArgList)
