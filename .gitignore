@@ -3,4 +3,3 @@ scheme-repl.cabal
 *~
 *.hi
 *.o
-src/old
