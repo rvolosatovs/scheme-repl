@@ -5,11 +5,10 @@ module Lisp
   , primitives
   ) where
 
-import           Repl
-
 import           Control.Monad
 import           Control.Monad.Except
 import           Data.IORef
+import           Repl
 import           System.IO
 import           Text.ParserCombinators.Parsec hiding (spaces)
 
