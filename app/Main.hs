@@ -1,7 +1,7 @@
 module Main where
 
 import           Lisp               (readExpr, primitives)
-import           Generic            (runOne, runRepl)
+import           Repl            (runOne, runRepl)
 import           System.Environment
 
 main :: IO ()

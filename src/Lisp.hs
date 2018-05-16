@@ -5,7 +5,7 @@ module Lisp
   , primitives
   ) where
 
-import           Generic
+import           Repl
 
 import           Control.Monad
 import           Control.Monad.Except

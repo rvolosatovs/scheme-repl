@@ -1,4 +1,4 @@
-module Generic
+module Repl
   ( GenVal(..)
   , showVal
   , GenError(..)
