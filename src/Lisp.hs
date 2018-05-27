@@ -105,8 +105,10 @@ parseStatement :: Parser GenVal
 parseStatement = do
   try parseFunctionDef <|> try parseVarArgsFunctionDef <|> try parseLambda <|>
     try parseVarArgsLambda <|> do
-    List (x:xs) <- parseList
-    return (Statement [x, List xs])
+    x <- parseAtom
+    spaces
+    xs <- parseList
+    return (Statement [x, xs])
 
 parseExpr :: Parser GenVal
 parseExpr =
